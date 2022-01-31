@@ -1,9 +1,12 @@
 const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const uuid = require('uuid');
 const User = require('../models/User');
+const checkToken = require('../checkToken');
+const serverErrorMessage = require('../serverErrorMessage');
 
-router.post('/register', async (req, res) => {
+router.post('/register', checkToken, async (req, res) => {
   const { name, email, password, confirmPassword } = req.body;
 
   if (!name) {
@@ -41,7 +44,7 @@ router.post('/register', async (req, res) => {
   });
 
   if (userExists) {
-    return res.status(200).json({
+    return res.status(409).json({
       message: 'O e-mail já está sendo usado!'
     })
   }
@@ -49,20 +52,19 @@ router.post('/register', async (req, res) => {
   const salt = await bcrypt.genSalt(12);
   const passwordHash = await bcrypt.hash(password, salt);
 
-  const user = new User({
-    name,
-    email,
-    password: passwordHash
-  });
-
   try {
-    await user.save();
+    await User.create({
+      name,
+      email,
+      password: passwordHash,
+     _id: uuid.v4()
+    })
     return res.status(201).json({
       message: 'Usuário cadastrado com sucesso!'
     })
   } catch (error) {
     return res.status(500).json({
-      error
+      error: serverErrorMessage
     })
   }
 });
@@ -87,7 +89,7 @@ router.post('/login', async (req, res) => {
   });
 
   if (!user) {
-    return res.status(200).json({
+    return res.status(404).json({
       message: 'Usuário não encontrado'
     });
   }
@@ -102,20 +104,90 @@ router.post('/login', async (req, res) => {
 
   try {
     const secret = process.env.SECRET;
-    const token = jwt.sign({
+    const accessToken = jwt.sign({
       id: user._id
     }, secret, {
-      expiresIn: "1800s"
+      expiresIn: "30m"
     });
 
-    return res.status(200).json({
-      message: 'Usuário autenticado com sucesso',
-      token
+    const refreshToken = jwt.sign({
+      id: user._id
+    }, secret, {
+      expiresIn: "3d"
     });
+
+
+    return res
+      .cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        expires: new Date(Date.now() + 1800000),
+        maxAge: new Date(Date.now() + 1800000)
+      })
+      .cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        expires: new Date(Date.now() + 259200000),
+        maxAge: new Date(Date.now() + 259200000)
+      })
+      .status(200)
+      .json({
+        message: 'Usuário autenticado com sucesso'
+      });
+  
   } catch (error) {
     return res.status(500).json({
-      error
+      error: serverErrorMessage
     })
+  }
+});
+
+router.post('refreshToken', async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    res.status(400).json({
+      message: "O token é necessário"
+    })
+  }
+
+  try {
+    const payload = jwt.verify(refreshToken, process.env.SECRET);
+
+    if (payload) {
+      const token = jwt.sign({
+        id: payload.id
+      });
+
+      res.status(200).json({
+        token
+      });
+    } else {
+      res.status(401).json({
+        message: 'Refresh token inválido'
+      });
+    }
+    
+    } catch (error) {
+      res.status(500).json({
+        error: serverErrorMessage
+      })
+    }
+});
+
+router.get('/logout', async (req, res) => {
+  try {
+    return res
+      .clearCookie('accessToken')
+      .clearCookie('refreshToken')
+      .status(200)
+      .json({
+        message: 'Desconectado com sucesso'
+      });
+  } catch (error) {
+    return res.status(500).json({
+      error: serverErrorMessage
+    });
   }
 });
 

@@ -1,0 +1,1 @@
+module.exports = "Estamos com problemas em nosso servidor. Tente novamente mais tarde.";

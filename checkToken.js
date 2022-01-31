@@ -1,10 +1,9 @@
 const jwt = require('jsonwebtoken');
 
 const checkToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const { accessToken } = req.cookies;
 
-  if (!token) {
+  if (!accessToken) {
     return res.status(401).json({
       message: 'Acesso negado!'
     });
@@ -13,12 +12,12 @@ const checkToken = (req, res, next) => {
   try {
     const secret = process.env.SECRET;
 
-    jwt.verify(token, secret);
+    jwt.verify(accessToken, secret);
 
     return next();
   } catch (error) {
-    return res.status(400).json({
-      message: 'Token inválido!'
+    return res.status(401).json({
+      error: 'Token inválido!'
     })
   }
 };

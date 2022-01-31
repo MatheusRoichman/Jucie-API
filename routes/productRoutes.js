@@ -2,33 +2,48 @@ const router = require('express').Router();
 const uuid = require('uuid');
 const Product = require('../models/Product');
 const checkToken = require('../checkToken');
+const serverErrorMessage = require('../serverErrorMessage');
 
 router.get('/', async (req, res) => {
-  const products = await Product.find();
-
-  return res.status(200).json(products);
-});
-
-router.get('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const product = await Product.findOne({
-      _id: id
+  const { id, category } = req.query;
+  
+  if (category) {
+    const productsFilteredByCategory = await Product.find({
+      category
     });
 
-    if (!product) {
-      return res.status(200).json({
+    if (!productsFilteredByCategory.length) {
+      return res.status(404).json({
+        message: "Sem produtos disponíveis nessa categoria."
+      });
+    }
+    
+    return res.status(200).json({
+      products: productsFilteredByCategory
+    });
+  } else if (id) {
+    const productFoundById = await Product.findById(id);
+
+    if (!productFoundById) {
+      return res.status(404).json({
         message: 'Produto não encontrado'
       });
     }
 
-    return res.status(200).json(product);
-  } catch (error) {
-    return res.status(500).json({
-      error
+    return res.status(200).json({
+      product: productFoundById
     });
-  } 
+  }
+
+  const products = await Product.find();
+
+  if (!products.length) {
+    return res.status(404).json({
+      message: 'Não há produtos disponíveis no momento.'
+    });
+  }
+
+  return res.status(200).json(products);
 });
 
 router.post('/', checkToken, async (req, res) => {
@@ -67,19 +82,19 @@ router.post('/', checkToken, async (req, res) => {
 
   if (!product._id) {
     return res.status(500).json({
-      error: 'Erro ao cadastrar o produto. Tente novamente.'
+      error: serverErrorMessage
     });
   }
 
   try {
     await Product.create(product);
-[]
+
     return res.status(201).json({
       message: 'Produto cadastrado com sucesso!'
     });
   } catch(error) {
     return res.status(500).json({
-      error
+      error: serverErrorMessage
     })
   }
 });
@@ -101,7 +116,7 @@ router.patch('/:id', checkToken, async (req, res) => {
     }, product);
 
     if (!updatedProduct.matchedCount) {
-      return res.status(200).json({
+      return res.status(404).json({
         message: 'Produto não encontrado'
       });
     }
@@ -109,7 +124,7 @@ router.patch('/:id', checkToken, async (req, res) => {
     return res.status(200).json(product);
   } catch (error) {
     return res.status(500).json({
-      error
+      error: serverErrorMessage
     });
   }
 });
@@ -122,7 +137,7 @@ router.delete('/:id', checkToken, async (req, res) => {
   });
 
   if (!product) {
-    return res.status(200).json({
+    return res.status(404).json({
       message: 'Produto não encontrado'
     });
   }
@@ -137,7 +152,7 @@ router.delete('/:id', checkToken, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({
-      error
+      error: serverErrorMessage
     });
   }
 })
