@@ -30,7 +30,7 @@ const checkToken = (req, res, next) => {
       log('Access token check', 'Internal server error', error.message);
 
       return res.status(500).json({
-        error
+        error: serverErrorMessage
       })
     }
     
